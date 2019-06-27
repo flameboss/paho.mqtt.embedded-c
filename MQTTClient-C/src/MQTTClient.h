@@ -34,6 +34,7 @@
   #define DLLExport
 #endif
 
+#include <wifi.h>
 #include "MQTTPacket.h"
 
 #if defined(MQTTCLIENT_PLATFORM_HEADER)
@@ -80,7 +81,7 @@ typedef struct MQTTMessage
     unsigned char dup;
     unsigned short id;
     void *payload;
-    size_t payloadlen;
+    uint32_t payloadlen;
 } MQTTMessage;
 
 typedef struct MessageData
@@ -100,35 +101,79 @@ typedef struct MQTTSubackData
     enum QoS grantedQoS;
 } MQTTSubackData;
 
-typedef void (*messageHandler)(MessageData*);
+struct MQTTClient;
+
+struct Network;
+
+typedef void (*messageHandler)(struct MQTTClient *, MessageData*);
 
 typedef struct MQTTClient
 {
     unsigned int next_packetid,
       command_timeout_ms;
-    size_t buf_size,
+    uint32_t buf_size,
       readbuf_size;
     unsigned char *buf,
       *readbuf;
     unsigned int keepAliveInterval;
-    char ping_outstanding;
     int isconnected;
     int cleansession;
+
+    Timer send_timer;
+
+    struct AsyncHandler
+    {
+        /** if non-zero, packet type we're waiting for */
+        enum msgTypes packet_type;
+        void (*fp)(struct MQTTClient *);
+        Timer timer;
+    } async_handler;
 
     struct MessageHandlers
     {
         const char* topicFilter;
-        void (*fp) (MessageData*);
+        void (*fp) (struct MQTTClient *,MessageData*);
     } messageHandlers[MAX_MESSAGE_HANDLERS];      /* Message handlers are indexed by subscription topic */
 
-    void (*defaultMessageHandler) (MessageData*);
+    void (*defaultMessageHandler) (struct MQTTClient *, MessageData*);
 
-    Network* ipstack;
+    struct Network* ipstack;
+    wifi_cx_t *pcx;
     Timer last_sent, last_received;
 #if defined(MQTT_TASK)
     Mutex mutex;
     Thread thread;
 #endif
+
+    /* added for async ops */
+
+    /** app should wait till this is false to publish */
+    int busy;
+
+    void *app_link;
+
+    void (*authentication_failed)(struct MQTTClient *);
+
+    /** amount read into readbuf */
+    int read_len;
+
+    /** message handler index of last start op */
+    int handler_index;
+
+    struct {
+        uint32_t started_tick;
+        uint32_t cnt;
+        uint32_t min;
+        uint32_t max;
+        uint32_t sum;
+    } stats;
+
+    /* added for broker ops */
+
+    int isbroker;
+    int islimited;
+    void (*subscribe)(struct MQTTClient *, MQTTString *);
+    int (*auth)(struct MQTTClient *c, MQTTString *username, MQTTString *password);
 } MQTTClient;
 
 #define DefaultClient {0, 0, 0, 0, NULL, NULL, 0, 0, 0}
@@ -141,8 +186,10 @@ typedef struct MQTTClient
  * @param command_timeout_ms
  * @param
  */
-DLLExport void MQTTClientInit(MQTTClient* client, Network* network, unsigned int command_timeout_ms,
-		unsigned char* sendbuf, size_t sendbuf_size, unsigned char* readbuf, size_t readbuf_size);
+DLLExport void MQTTClientInit(MQTTClient* client, struct Network * network, unsigned int command_timeout_ms,
+		unsigned char* sendbuf, size_t sendbuf_size);
+
+int MQTTClientIsSubscribed(MQTTClient* c, MQTTString* topicName);
 
 /** MQTT Connect - send an MQTT connect packet down the network and wait for a Connack
  *  The nework object must be connected to the network endpoint before calling this
@@ -159,6 +206,10 @@ DLLExport int MQTTConnectWithResults(MQTTClient* client, MQTTPacket_connectData*
  */
 DLLExport int MQTTConnect(MQTTClient* client, MQTTPacket_connectData* options);
 
+int MQTTConnectStart(MQTTClient* client, MQTTPacket_connectData* options);
+
+void MQTTCycle(MQTTClient* c);
+
 /** MQTT Publish - send an MQTT publish packet and wait for all acks to complete for all QoSs
  *  @param client - the client object to use
  *  @param topic - the topic to publish to
@@ -166,6 +217,8 @@ DLLExport int MQTTConnect(MQTTClient* client, MQTTPacket_connectData* options);
  *  @return success code
  */
 DLLExport int MQTTPublish(MQTTClient* client, const char*, MQTTMessage*);
+
+int MQTTPublishStart(MQTTClient* client, const char*, MQTTMessage*);
 
 /** MQTT SetMessageHandler - set or remove a per topic message handler
  *  @param client - the client object to use
@@ -182,6 +235,7 @@ DLLExport int MQTTSetMessageHandler(MQTTClient* c, const char* topicFilter, mess
  *  @return success code
  */
 DLLExport int MQTTSubscribe(MQTTClient* client, const char* topicFilter, enum QoS, messageHandler);
+int MQTTSubscribeStart(MQTTClient* client, const char* topicFilter, enum QoS, messageHandler messageHandler);
 
 /** MQTT Subscribe - send an MQTT subscribe packet and wait for suback before returning.
  *  @param client - the client object to use
@@ -217,6 +271,12 @@ DLLExport int MQTTYield(MQTTClient* client, int time);
  *  @return truth value indicating whether the client is connected to the server
  */
 DLLExport int MQTTIsConnected(MQTTClient* client);
+
+/** Can't switch connections while this is true */
+int MQTTIsBusy(MQTTClient* client);
+
+/** Start broker service connection */
+void MQTTServerStart(MQTTClient* c);
 
 #if defined(MQTT_TASK)
 /** MQTT start background thread for a client.  After this, MQTTYield should not be called.

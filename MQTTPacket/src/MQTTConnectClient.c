@@ -139,6 +139,7 @@ int MQTTDeserialize_connack(unsigned char* sessionPresent, unsigned char* connac
 	MQTTConnackFlags flags = {0};
 
 	FUNC_ENTRY;
+	(void)buflen;
 	header.byte = readChar(&curdata);
 	if (header.bits.type != CONNACK)
 		goto exit;
@@ -211,4 +212,15 @@ int MQTTSerialize_disconnect(unsigned char* buf, int buflen)
 int MQTTSerialize_pingreq(unsigned char* buf, int buflen)
 {
 	return MQTTSerialize_zero(buf, buflen, PINGREQ);
+}
+
+/**
+  * Serializes a disconnect packet into the supplied buffer, ready for writing to a socket
+  * @param buf the buffer into which the packet will be serialized
+  * @param buflen the length in bytes of the supplied buffer, to avoid overruns
+  * @return serialized length, or error if 0
+  */
+int MQTTSerialize_pingresp(unsigned char* buf, int buflen)
+{
+    return MQTTSerialize_zero(buf, buflen, PINGRESP);
 }
