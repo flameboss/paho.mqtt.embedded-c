@@ -285,6 +285,9 @@ int keepalive(MQTTClient* c)
         if (len > 0 && (rc = sendPacket(c, len, &timer)) == SUCCESS) {
             async_waitfor(c, PINGRESP, NULL, c->command_timeout_ms);
         }
+        else {
+            log_warn("mqtt: keepalive fail len %d rc %d", len, rc);
+        }
         TimerCountdown(&c->last_received, c->command_timeout_ms);
     }
 
