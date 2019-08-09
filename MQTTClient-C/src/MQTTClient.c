@@ -435,6 +435,7 @@ static int cycle(MQTTClient* c, Timer* timer)
             }
             break;
         case DISCONNECT:
+            log_warn("mqtt: recvd DISCONNECT");
             MQTTCloseSession(c);
             return 0;
     }
@@ -447,8 +448,10 @@ static int cycle(MQTTClient* c, Timer* timer)
 exit:
     if (rc == SUCCESS)
         rc = packet_type;
-    else if (c->isconnected)
+    else if (c->isconnected) {
+        log_warn("mqtt: cycle rc %d", rc);
         MQTTCloseSession(c);
+    }
     return rc;
 }
 
@@ -549,8 +552,8 @@ void MQTTCycle(MQTTClient* c)
         }
         else if (TimerIsExpired(&c->async_handler.timer))
         {
-            printf("%d: mqtt: MQTTCycle: %p(%p): timeout waiting for %s\n",
-                   clock_ticks, c->pcx, c->pcx->p_hw_link, MQTTMsgTypeNames[c->async_handler.packet_type]);
+            log_warn("mqtt: MQTTCycle: timeout %s",
+                     MQTTMsgTypeNames[c->async_handler.packet_type]);
             MQTTCloseSession(c);
         }
     }
@@ -631,10 +634,10 @@ void ConnectEnd(MQTTClient *c)
         {
             c->authentication_failed(c);
         }
-        printf("mqtt: error: %d CONNACK\n", data.rc);
+        log_warn("mqtt: error: %d CONNACK", data.rc);
     }
     else {
-        printf("mqtt: error: reading CONNACK\n");
+        log_warn("mqtt: error: reading CONNACK");
     }
     MQTTCloseSession(c);
 }
@@ -716,8 +719,10 @@ int MQTTSubscribeStart(MQTTClient* c, const char* topicFilter, enum QoS qos, mes
     async_waitfor(c, SUBACK, SubscribeEnd, c->command_timeout_ms);
 
 exit:
-    if (rc == FAILURE)
+    if (rc == FAILURE) {
+        log_warn("mqtt: subscribe start failed");
         MQTTCloseSession(c);
+    }
 #if defined(MQTT_TASK)
       MutexUnlock(&c->mutex);
 #endif
@@ -751,8 +756,10 @@ int MQTTPublishStart(MQTTClient* c, const char* topicName, MQTTMessage* message)
 #if defined(MQTT_TASK)
       MutexLock(&c->mutex);
 #endif
-      if (!c->isconnected)
-            goto exit;
+      if (!c->isconnected) {
+          log_warn("mqtt: pub start not connected");
+          goto exit;
+      }
 
     TimerInit(&timer);
     TimerCountdownMS(&timer, c->command_timeout_ms);
@@ -762,13 +769,17 @@ int MQTTPublishStart(MQTTClient* c, const char* topicName, MQTTMessage* message)
 
     len = MQTTSerialize_publish(c->buf, c->buf_size, 0, message->qos, message->retained, message->id,
               topic, (unsigned char*)message->payload, message->payloadlen);
-    if (len <= 0)
+    if (len <= 0) {
+        log_warn("mqtt: pub start serialize fail");
         goto exit;
+    }
 
     DEBUG_PRINT("%d: mqtt: PUBLISH id %d, %s, %d, qos %d\n",
                 clock_ticks, message->id, topic.cstring, message->payloadlen, message->qos);
-    if ((rc = sendPacket(c, len, &timer)) != SUCCESS) // send the subscribe packet
-        goto exit; // there was a problem
+    if ((rc = sendPacket(c, len, &timer)) != SUCCESS) {
+        log_warn("mqtt: pub start send fail");
+        goto exit;
+    }
     if (message->qos) {
         async_waitfor(c, PUBACK, PublishEnd, c->command_timeout_ms);
     }
@@ -787,7 +798,7 @@ static void PublishEnd(MQTTClient* c)
     unsigned short mypacketid;
     unsigned char dup, type;
     if (MQTTDeserialize_ack(&type, &dup, &mypacketid, c->readbuf, c->readbuf_size) != 1) {
-        printf("mqtt: PublishEnd error reading ack\n");
+        log_warn("mqtt: PublishEnd error reading ack");
         MQTTCloseSession(c);
         return;
     }
@@ -837,7 +848,7 @@ static void ClientConnect(MQTTClient* c)
 
     rc = MQTTDeserialize_connect(&data, c->readbuf, c->readbuf_size);
     if (rc != 1) {
-        printf("mqtt: deserialize_connect error %d\n", rc);
+        log_warn("mqtt: deserialize_connect error %d", rc);
         goto exit;
     }
 
@@ -845,17 +856,17 @@ static void ClientConnect(MQTTClient* c)
 
     if (c->auth && !(*c->auth)(c, &data.username, &data.password)) {
         rc = 5;
-        printf("mqtt: auth failed: %d\n", rc);
+        log_warn("mqtt: auth failed: %d", rc);
     }
 
     TimerInit(&timer);
     TimerCountdownMS(&timer, c->command_timeout_ms);
     if ((len = MQTTSerialize_connack(c->buf, c->buf_size, rc, 0)) <= 0) {
-        printf("mqtt: serialize_connack error %d\n", len);
+        log_warn("mqtt: serialize_connack error %d", len);
         goto exit;
     }
     if ((rc = sendPacket(c, len, &timer)) != SUCCESS) {
-        printf("mqtt: send connack error %d\n", rc);
+        log_warn("mqtt: send connack error %d", rc);
         goto exit;
     }
     if (rc == 0) {
