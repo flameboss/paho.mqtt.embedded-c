@@ -63,7 +63,10 @@ static int sendPacket(MQTTClient* c, int length, Timer* timer)
         rc = SUCCESS;
     }
     else
+    {
         rc = FAILURE;
+        c->busy = 0;
+    }
     return rc;
 }
 
@@ -264,7 +267,7 @@ int keepalive(MQTTClient* c)
 {
     int rc = SUCCESS;
 
-    if (c->keepAliveInterval == 0)
+    if (c->keepAliveInterval == 0 || c->busy)
         goto exit;
 
     if (c->isbroker) {
