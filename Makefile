@@ -177,9 +177,6 @@ all: build
 	
 build: | mkdir ${EMBED_MQTTLIB_C_TARGET} ${SYNC_SAMPLES} ${SYNC_TESTS}
 
-clean:
-	rm -rf ${blddir}/*
-	
 mkdir:
 	-mkdir -p ${blddir}/samples
 	-mkdir -p ${blddir}/test
