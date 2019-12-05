@@ -40,6 +40,7 @@ int MQTTPacket_checkVersion(MQTTString* protocol, int version)
 	return rc;
 }
 
+static const MQTTPacket_connectData initialized_connectData = MQTTPacket_connectData_initializer;
 
 /**
   * Deserializes the supplied (wire) buffer into connect data structure
@@ -60,6 +61,7 @@ int MQTTDeserialize_connect(MQTTPacket_connectData* data, unsigned char* buf, in
 	int mylen = 0;
 
 	FUNC_ENTRY;
+	*data = initialized_connectData;
 	header.byte = readChar(&curdata);
 	if (header.bits.type != CONNECT)
 		goto exit;
