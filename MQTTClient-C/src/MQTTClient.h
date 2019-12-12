@@ -173,6 +173,7 @@ typedef struct MQTTClient
     int isbroker;
     int islimited;
     void (*subscribe)(struct MQTTClient *, MQTTString *);
+    void (*unsubscribe)(struct MQTTClient *, MQTTString *);
     int (*auth)(struct MQTTClient *c, MQTTString *username, MQTTString *password);
 } MQTTClient;
 

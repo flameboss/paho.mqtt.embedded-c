@@ -376,6 +376,35 @@ static int cycle(MQTTClient* c, Timer* timer)
             break;
         case SUBACK:
             break;
+        case UNSUBSCRIBE:
+            if (c->isbroker) {
+                uint8_t dup;
+                uint16_t msgid;
+                int count;
+                MQTTString topicFilters[2];
+                if (MQTTDeserialize_unsubscribe(&dup, &msgid, 2, &count, topicFilters,
+                        c->readbuf, c->readbuf_size) != 1) {
+                    log_warn("unsub decode error");
+                    goto exit;
+                }
+
+                len = MQTTSerialize_ack(c->buf, c->buf_size, UNSUBACK, 0, msgid);
+                if (len <= 0) {
+                    log_warn("unsuback encode error");
+                    rc = FAILURE;
+                }
+                else {
+                    /* simple broker treats any unsubscribe as a unsubscribe to '#' */
+                    rc = MQTTSetMessageHandler(c, "#", NULL);
+                    if (rc == SUCCESS) {
+                        rc = sendPacket(c, len, timer);
+                        if (c->unsubscribe) {
+                            (*c->unsubscribe)(c, &topicFilters[0]);
+                        }
+                    }
+                }
+            }
+            break;
         case PUBLISH:
         {
             MQTTString topicName;
