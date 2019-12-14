@@ -46,10 +46,13 @@ static int sendPacket(MQTTClient* c, int length, Timer* timer)
 {
     int rc = FAILURE,
         sent = 0;
+    MQTTHeader header = {0};
 
     ASSERT(c->busy == 0);
     c->busy = 1;
 
+    header.byte = c->buf[0];
+    DEBUG_PRINT("mqtt: send %s (%d)\n", MQTTMsgTypeNames[header.bits.type], header.bits.type);
     while (sent < length && !TimerIsExpired(timer))
     {
         rc = c->ipstack->mqttwrite(c, &c->buf[sent], length, TimerLeftMS(timer));
@@ -346,7 +349,7 @@ static int cycle(MQTTClient* c, Timer* timer)
         case PUBACK:
             break;
         case SUBSCRIBE:
-            {
+            if (c->isbroker) {
                 uint8_t dup;
                 uint16_t msgid;
                 int count;
@@ -356,20 +359,17 @@ static int cycle(MQTTClient* c, Timer* timer)
                 if (MQTTDeserialize_subscribe(&dup, &msgid, 2, &count, topicFilters, reqQoSs,
                         c->readbuf, c->readbuf_size) != 1)
                     goto exit;
-                if (c->isbroker)
-                {
-                    len = MQTTSerialize_ack(c->buf, c->buf_size, SUBACK, 0, msgid);
-                    if (len <= 0)
-                        rc = FAILURE;
-                    else {
-                        /* simple broker treats any subscribe as a subscribe to '#' */
-                        rc = MQTTSetMessageHandler(c, "#", clientHandler);
-                        if (rc == SUCCESS) {
-                            rc = sendPacket(c, len, timer);
-                            if (c->subscribe) {
-                                (*c->subscribe)(c, &topicFilters[0]);
-                            }
-                        }
+                if (c->subscribe) {
+                    (*c->subscribe)(c, &topicFilters[0]);
+                }
+                /* simple broker treats any subscribe as a subscribe to '#' */
+                rc = MQTTSetMessageHandler(c, "#", clientHandler);
+                len = MQTTSerialize_ack(c->buf, c->buf_size, SUBACK, 0, msgid);
+                if (len <= 0)
+                    rc = FAILURE;
+                else {
+                    if (rc == SUCCESS) {
+                        rc = sendPacket(c, len, timer);
                     }
                 }
             }
