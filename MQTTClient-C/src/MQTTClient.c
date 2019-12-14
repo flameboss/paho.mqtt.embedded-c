@@ -46,12 +46,14 @@ static int sendPacket(MQTTClient* c, int length, Timer* timer)
 {
     int rc = FAILURE,
         sent = 0;
-    MQTTHeader header = {0};
+#if DEBUG
+    MQTTHeader header;
+    header.byte = c->buf[0];
+#endif
 
     ASSERT(c->busy == 0);
     c->busy = 1;
 
-    header.byte = c->buf[0];
     DEBUG_PRINT("mqtt: send %s (%d)\n", MQTTMsgTypeNames[header.bits.type], header.bits.type);
     while (sent < length && !TimerIsExpired(timer))
     {
