@@ -33,6 +33,9 @@ extern "C" {
   #define DLLExport  
 #endif
 
+
+enum QoS { QOS0, QOS1, QOS2, SUBFAIL=0x80 };
+
 enum errors
 {
 	MQTTPACKET_BUFFER_TOO_SHORT = -2,

@@ -742,7 +742,7 @@ int MQTTSubscribeStart(MQTTClient* c, const char* topicFilter, enum QoS qos, mes
     TimerInit(&timer);
     TimerCountdownMS(&timer, c->command_timeout_ms);
 
-    len = MQTTSerialize_subscribe(c->buf, c->buf_size, 0, getNextPacketId(c), 1, &topic, (int*)&qos);
+    len = MQTTSerialize_subscribe(c->buf, c->buf_size, 0, getNextPacketId(c), 1, &topic, &qos);
     if (len <= 0)
         goto exit;
     if ((rc = sendPacket(c, len, &timer)) != SUCCESS) // send the subscribe packet
@@ -772,7 +772,7 @@ static void SubscribeEnd(MQTTClient* c)
     int count = 0;
     unsigned short mypacketid;
     data.grantedQoS = QOS0;
-    if (MQTTDeserialize_suback(&mypacketid, 1, &count, (int*)&data.grantedQoS, c->readbuf, c->readbuf_size) == 1)
+    if (MQTTDeserialize_suback(&mypacketid, 1, &count, &data.grantedQoS, c->readbuf, c->readbuf_size) == 1)
     {
         if (data.grantedQoS == SUBFAIL && c->handler_index != -1)
         {
