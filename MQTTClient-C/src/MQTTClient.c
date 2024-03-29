@@ -22,6 +22,7 @@
 
 //#define DEBUG 1
 #include <fb-debug.h>
+#include <assert.h>
 
 
 static void ConnectEnd(MQTTClient *c);
