@@ -270,7 +270,7 @@ int MQTTPacket_equals(MQTTString* a, char* bptr)
 	int alen = 0,
 		blen = 0;
 	char *aptr;
-	
+
 	if (a->cstring)
 	{
 		aptr = a->cstring;
@@ -282,7 +282,7 @@ int MQTTPacket_equals(MQTTString* a, char* bptr)
 		alen = a->lenstring.len;
 	}
 	blen = strlen(bptr);
-	
+
 	return (alen == blen) && (strncmp(aptr, bptr, alen) == 0);
 }
 
@@ -375,7 +375,7 @@ int MQTTPacket_readnb(unsigned char* buf, int buflen, MQTTTransport *trp)
 	switch(trp->state){
 	default:
 		trp->state = 0;
-		/*FALLTHROUGH*/
+		__attribute__((fallthrough));
 	case 0:
 		/* read the header byte.  This has the packet type in it */
 		if ((frc=(*trp->getfn)(trp->sck, buf, 1)) == -1)
@@ -384,7 +384,7 @@ int MQTTPacket_readnb(unsigned char* buf, int buflen, MQTTTransport *trp)
 			return 0;
 		trp->len = 0;
 		++trp->state;
-		/*FALLTHROUGH*/
+		__attribute__((fallthrough));
 		/* read the remaining length.  This is variable in itself */
 	case 1:
 		if((frc=MQTTPacket_decodenb(trp)) == MQTTPACKET_READ_ERROR)
@@ -395,7 +395,7 @@ int MQTTPacket_readnb(unsigned char* buf, int buflen, MQTTTransport *trp)
 		if((trp->rem_len + trp->len) > buflen)
 			goto exit;
 		++trp->state;
-		/*FALLTHROUGH*/
+		__attribute__((fallthrough));
 	case 2:
 		if(trp->rem_len){
 			/* read the rest of the buffer using a callback to supply the rest of the data */
