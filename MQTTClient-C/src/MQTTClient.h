@@ -152,6 +152,8 @@ typedef struct MQTTClient
 
     void (*authentication_failed)(struct MQTTClient *);
 
+    void (*did_publish)(struct MQTTClient *);
+
     /** amount read into readbuf */
     int read_len;
 

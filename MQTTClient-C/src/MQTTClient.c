@@ -100,6 +100,10 @@ void MQTTClientInit(MQTTClient* c, Network* network, unsigned int command_timeou
     c->stats.cnt = c->stats.max = c->stats.sum = 0;
     c->stats.min = 1000000;
 
+    c->auth = NULL;
+    c->authentication_failed = NULL;
+    c->did_publish = NULL;
+
 #if defined(MQTT_TASK)
 	  MutexInit(&c->mutex);
 #endif
@@ -292,6 +296,7 @@ int keepalive(MQTTClient* c)
         TimerCountdownMS(&timer, 1000);
         int len = MQTTSerialize_pingreq(c->buf, c->buf_size);
         if (len > 0 && (rc = sendPacket(c, len, &timer)) == SUCCESS) {
+            log_info("sendPacket PINGREQ");
             async_waitfor(c, PINGRESP, NULL, c->command_timeout_ms);
         }
         else {
@@ -839,6 +844,9 @@ static void PublishEnd(MQTTClient* c)
         log_warn("mqtt: PublishEnd error reading ack");
         MQTTCloseSession(c);
         return;
+    }
+    if (c->did_publish != NULL) {
+        (*c->did_publish)(c);
     }
 }
 
