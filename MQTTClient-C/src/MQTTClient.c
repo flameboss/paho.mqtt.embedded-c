@@ -296,7 +296,6 @@ int keepalive(MQTTClient* c)
         TimerCountdownMS(&timer, 1000);
         int len = MQTTSerialize_pingreq(c->buf, c->buf_size);
         if (len > 0 && (rc = sendPacket(c, len, &timer)) == SUCCESS) {
-            log_info("sendPacket PINGREQ");
             async_waitfor(c, PINGRESP, NULL, c->command_timeout_ms);
         }
         else {
