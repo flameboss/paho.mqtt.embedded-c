@@ -371,7 +371,7 @@ static int cycle(MQTTClient* c, Timer* timer)
                 }
                 /* simple broker treats any subscribe as a subscribe to '#' */
                 rc = MQTTSetMessageHandler(c, "#", clientHandler);
-                len = MQTTSerialize_ack(c->buf, c->buf_size, SUBACK, 0, msgid);
+                len = MQTTSerialize_suback(c->buf, c->buf_size, msgid, count, reqQoSs);
                 if (len <= 0)
                     rc = FAILURE;
                 else {
