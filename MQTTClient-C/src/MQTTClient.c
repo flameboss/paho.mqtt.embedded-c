@@ -52,7 +52,20 @@ static int sendPacket(MQTTClient* c, int length, Timer* timer)
     header.byte = c->buf[0];
 #endif
 
-    ASSERT(c->busy == 0);
+    /* A write is already in flight on this client. This used to be
+     * ASSERT(c->busy == 0), which resets the device and takes the cook with it.
+     * Every sendPacket() caller already treats FAILURE as "close this session",
+     * so refusing the write costs one MQTT connection -- the peer reconnects --
+     * instead of the whole controller.
+     *
+     * Refusing is not just the gentler option, it is the correct one: buf is
+     * the single global sendbuf shared by the cloud cx and both local cxs, so
+     * serialising a second packet into it would corrupt the one being sent. */
+    if (c->busy) {
+        log_warn("mqtt: send type %d len %d while busy %d, cx %p",
+                c->buf[0] >> 4, length, c->busy, c->pcx);
+        return FAILURE;
+    }
     c->busy = 1;
 
     DEBUG_PRINT("mqtt: send %s (%d)\n", MQTTMsgTypeNames[header.bits.type], header.bits.type);
@@ -887,6 +900,12 @@ void MQTTServerStart(MQTTClient* c)
 static void ClientConnect(MQTTClient* c)
 {
     int rc;
+    /* Kept apart from rc, which the sendPacket() below overwrites with SUCCESS
+     * (0). Sharing one variable meant a client we had just refused with
+     * CONNACK rc=5 still fell into the accept branch and got isconnected /
+     * isbroker set, so the session stayed up and its PUBLISHes reached
+     * defaultMessageHandler -- an unauthenticated peer driving the device. */
+    int connack_rc;
     MQTTPacket_connectData data;
     int len = 0;
     Timer timer;
@@ -897,16 +916,16 @@ static void ClientConnect(MQTTClient* c)
         goto exit;
     }
 
-    rc = 0;
+    connack_rc = 0;
 
     if (c->auth && !(*c->auth)(c, &data.username, &data.password)) {
-        rc = 5;
-        log_warn("mqtt: auth failed: %d", rc);
+        connack_rc = 5;
+        log_warn("mqtt: auth failed: %d", connack_rc);
     }
 
     TimerInit(&timer);
     TimerCountdownMS(&timer, c->command_timeout_ms);
-    if ((len = MQTTSerialize_connack(c->buf, c->buf_size, rc, 0)) <= 0) {
+    if ((len = MQTTSerialize_connack(c->buf, c->buf_size, connack_rc, 0)) <= 0) {
         log_warn("mqtt: serialize_connack error %d", len);
         goto exit;
     }
@@ -914,7 +933,7 @@ static void ClientConnect(MQTTClient* c)
         log_warn("mqtt: send connack error %d", rc);
         goto exit;
     }
-    if (rc == 0) {
+    if (connack_rc == 0) {
         c->isconnected = 1;
         c->isbroker = 1;
         c->keepAliveInterval = data.keepAliveInterval;
